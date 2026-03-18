@@ -32,7 +32,44 @@ await zoomReset();
 
 ## Scroll Behavior
 
-- Scroll the issue panel as new comments are added so the latest comment is always visible.
+- When a new comment or the typing indicator appears, **only scroll if the element is not fully visible** in the panel.
+- When scrolling, scroll **minimally** — just enough so the bottom of the element aligns with the bottom of the visible area. **Never center** the element.
+- If the element is already fully in view, do not scroll at all.
+
+```js
+function scrollCommentIntoView(commentEl, containerEl) {
+  const cRect = commentEl.getBoundingClientRect();
+  const pRect = containerEl.getBoundingClientRect();
+  const fullyVisible = cRect.top >= pRect.top && cRect.bottom <= pRect.bottom;
+  if (fullyVisible) return;
+  let targetScrollTop = containerEl.scrollTop;
+  if (cRect.bottom > pRect.bottom) {
+    targetScrollTop += cRect.bottom - pRect.bottom; // scroll down minimally
+  } else if (cRect.top < pRect.top) {
+    targetScrollTop -= pRect.top - cRect.top;       // scroll up minimally
+  }
+  containerEl.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+}
+```
+
+## Typing Indicator Placement
+
+- The "ML Agent is typing…" indicator must always appear **immediately below the last visible comment**.
+- Before showing it, move the indicator node in the DOM to sit directly after the last `.comment-block.visible` element. If no comment is visible yet, prepend it to the comments section.
+
+```js
+function showTypingIndicator() {
+  const section = document.getElementById('comments-section');
+  const indicator = document.getElementById('typing-indicator');
+  const comments = Array.from(section.querySelectorAll('.comment-block.visible'));
+  if (comments.length > 0) {
+    comments[comments.length - 1].after(indicator);
+  } else {
+    section.prepend(indicator);
+  }
+  indicator.classList.add('show');
+}
+```
 
 ## Playback Controls (fixed bottom bar, outside zoom layer)
 

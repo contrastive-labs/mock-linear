@@ -948,16 +948,43 @@ function scaleToFit(rect, padding = 0.85) {
   return Math.min(sx, sy, 3.5); // cap at 3.5
 }
 
-/* Helper: scroll a comment into the centre of the panel, but only if it
-   is not already fully visible inside the scrollable container.         */
+/* Helper: show the typing indicator immediately after the last visible comment.
+   Moves the #typing-indicator node in the DOM so it sits directly below the
+   last comment that currently has class 'visible'. If no comment is visible
+   yet it stays at the top of the comments section.                          */
+function showTypingIndicator() {
+  const section = el('comments-section');
+  const indicator = el('typing-indicator');
+  // Find the last visible comment block
+  const comments = Array.from(section.querySelectorAll('.comment-block.visible'));
+  if (comments.length > 0) {
+    const lastComment = comments[comments.length - 1];
+    lastComment.after(indicator);
+  } else {
+    section.prepend(indicator);
+  }
+  indicator.classList.add('show');
+}
+
+/* Helper: scroll minimally so the element just fits inside the container.
+   - If already fully visible: no scroll.
+   - If below the bottom edge: scroll down just enough so the bottom of the
+     element aligns with the bottom of the container.
+   - If above the top edge: scroll up just enough so the top of the element
+     aligns with the top of the container.                                  */
 function scrollCommentIntoView(commentEl, containerEl) {
   const cRect = commentEl.getBoundingClientRect();
   const pRect = containerEl.getBoundingClientRect();
   const fullyVisible = cRect.top >= pRect.top && cRect.bottom <= pRect.bottom;
   if (fullyVisible) return; // already fully in view — no scroll needed
-  // Scroll so the comment is vertically centred in the container
-  const commentOffsetTop = commentEl.offsetTop; // relative to scrollable parent
-  const targetScrollTop = commentOffsetTop - (containerEl.clientHeight / 2) + (commentEl.offsetHeight / 2);
+  let targetScrollTop = containerEl.scrollTop;
+  if (cRect.bottom > pRect.bottom) {
+    // element is (partially) below the visible area — scroll down minimally
+    targetScrollTop += cRect.bottom - pRect.bottom;
+  } else if (cRect.top < pRect.top) {
+    // element is (partially) above the visible area — scroll up minimally
+    targetScrollTop -= pRect.top - cRect.top;
+  }
   containerEl.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
 }
 
@@ -1097,7 +1124,7 @@ const STEPS = [
   { label: 'ML Agent reviewing the issue', durationMs: 3800,
     async fn() {
       showCaption('ML Agent is reviewing the issue…');
-      el('typing-indicator').classList.add('show');
+      showTypingIndicator();
       await gate(100);
       scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
       await gate(3300);
@@ -1122,7 +1149,7 @@ const STEPS = [
   { label: 'Training job launched', durationMs: 4500,
     async fn() {
       showCaption('Training job running on AWS Batch…');
-      el('typing-indicator').classList.add('show');
+      showTypingIndicator();
       await gate(100);
       scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
       await gate(2100);
@@ -1140,7 +1167,7 @@ const STEPS = [
     async fn() {
       await showCaption('4 hours later — training complete!', 1800);
       showCaption('ML Agent is writing up the results…');
-      el('typing-indicator').classList.add('show');
+      showTypingIndicator();
       await gate(100);
       scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
       await gate(2100);
@@ -1299,26 +1326,14 @@ function applyStateAtStep(n) {
   el('comment-2').classList.toggle('visible', n >= 11);
   el('comment-3').classList.toggle('visible', n >= 12);
 
-  // ─ scroll position: centre the most recent visible comment ─
+  // ─ scroll position: minimal scroll to show the most recent visible comment ─
   const container = el('issue-panel-left');
   if (n >= 12) {
-    requestAnimationFrame(() => {
-      const c = el('comment-3');
-      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
-      container.scrollTop = Math.max(0, top);
-    });
+    requestAnimationFrame(() => scrollCommentIntoView(el('comment-3'), container));
   } else if (n >= 11) {
-    requestAnimationFrame(() => {
-      const c = el('comment-2');
-      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
-      container.scrollTop = Math.max(0, top);
-    });
+    requestAnimationFrame(() => scrollCommentIntoView(el('comment-2'), container));
   } else if (n >= 10) {
-    requestAnimationFrame(() => {
-      const c = el('comment-1');
-      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
-      container.scrollTop = Math.max(0, top);
-    });
+    requestAnimationFrame(() => scrollCommentIntoView(el('comment-1'), container));
   } else {
     container.scrollTop = 0;
   }

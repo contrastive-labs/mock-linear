@@ -112,7 +112,8 @@ Next steps: run perceptual loss fine-tuning for another +0.3–0.5 dB gain.
 
 - **Zoom in**: should fit the dialog window.
 - **Zoom out**: back to normal full window.
-- **Scroll**: When a new comment is added, scroll only if the comment is **not fully visible** in the panel. When scrolling, center the comment vertically in the panel. If the comment is already fully in view, do not scroll.
+- **Scroll**: When a new comment or the typing indicator appears, scroll only if it is **not fully visible** in the panel. When scrolling, scroll **minimally** — just enough so the bottom of the element aligns with the bottom of the visible area. Never center the element. If it is already fully in view, do not scroll.
+- **Typing indicator placement**: The "ML Agent is typing…" indicator always appears **immediately below the last visible comment**. It is moved in the DOM to sit directly after the last comment with class `visible` before being shown.
 - The **controls bar** (step indicator + playback row) is placed **outside** the zoom layer and is never scaled.
 - The **caption overlay** and **cursor** are also outside the zoom layer.
 
