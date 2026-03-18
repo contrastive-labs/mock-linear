@@ -112,7 +112,7 @@ Next steps: run perceptual loss fine-tuning for another +0.3–0.5 dB gain.
 
 - **Zoom in**: should fit the dialog window.
 - **Zoom out**: back to normal full window.
-- **Scroll** as needed when we add comments. 
+- **Scroll**: When a new comment is added, scroll only if the comment is **not fully visible** in the panel. When scrolling, center the comment vertically in the panel. If the comment is already fully in view, do not scroll.
 - The **controls bar** (step indicator + playback row) is placed **outside** the zoom layer and is never scaled.
 - The **caption overlay** and **cursor** are also outside the zoom layer.
 

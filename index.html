@@ -948,6 +948,19 @@ function scaleToFit(rect, padding = 0.85) {
   return Math.min(sx, sy, 3.5); // cap at 3.5
 }
 
+/* Helper: scroll a comment into the centre of the panel, but only if it
+   is not already fully visible inside the scrollable container.         */
+function scrollCommentIntoView(commentEl, containerEl) {
+  const cRect = commentEl.getBoundingClientRect();
+  const pRect = containerEl.getBoundingClientRect();
+  const fullyVisible = cRect.top >= pRect.top && cRect.bottom <= pRect.bottom;
+  if (fullyVisible) return; // already fully in view — no scroll needed
+  // Scroll so the comment is vertically centred in the container
+  const commentOffsetTop = commentEl.offsetTop; // relative to scrollable parent
+  const targetScrollTop = commentOffsetTop - (containerEl.clientHeight / 2) + (commentEl.offsetHeight / 2);
+  containerEl.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+}
+
 const STEPS = [
   /* 1 – Intro fades, show issues list */
   { label: 'Opening Linear — Issues view', durationMs: 2800,
@@ -1096,7 +1109,8 @@ const STEPS = [
       showCaption('ML Agent posts a cost & time estimate');
       el('typing-indicator').classList.remove('show');
       el('comment-1').classList.add('visible');
-      el('issue-panel-left').scrollTo({ top: 200, behavior: 'smooth' });
+      await gate(100); // let DOM render the comment first
+      scrollCommentIntoView(el('comment-1'), el('issue-panel-left'));
       await gate(3000);
       hideCaption();
     }
@@ -1107,11 +1121,11 @@ const STEPS = [
     async fn() {
       showCaption('Training job running on AWS Batch…');
       el('typing-indicator').classList.add('show');
-      el('issue-panel-left').scrollTo({ top: 300, behavior: 'smooth' });
       await gate(2200);
       el('typing-indicator').classList.remove('show');
       el('comment-2').classList.add('visible');
-      el('issue-panel-left').scrollTo({ top: 450, behavior: 'smooth' });
+      await gate(100);
+      scrollCommentIntoView(el('comment-2'), el('issue-panel-left'));
       await gate(1500);
       hideCaption();
     }
@@ -1123,11 +1137,11 @@ const STEPS = [
       await showCaption('4 hours later — training complete!', 1800);
       showCaption('ML Agent is writing up the results…');
       el('typing-indicator').classList.add('show');
-      el('issue-panel-left').scrollTo({ top: 600, behavior: 'smooth' });
       await gate(2200);
       el('typing-indicator').classList.remove('show');
       el('comment-3').classList.add('visible');
-      el('issue-panel-left').scrollTo({ top: 900, behavior: 'smooth' });
+      await gate(100);
+      scrollCommentIntoView(el('comment-3'), el('issue-panel-left'));
       await gate(1200);
       hideCaption();
     }
@@ -1279,11 +1293,29 @@ function applyStateAtStep(n) {
   el('comment-2').classList.toggle('visible', n >= 11);
   el('comment-3').classList.toggle('visible', n >= 12);
 
-  // ─ scroll position ─
-  if (n >= 12) el('issue-panel-left').scrollTop = 900;
-  else if (n >= 11) el('issue-panel-left').scrollTop = 450;
-  else if (n >= 10) el('issue-panel-left').scrollTop = 200;
-  else el('issue-panel-left').scrollTop = 0;
+  // ─ scroll position: centre the most recent visible comment ─
+  const container = el('issue-panel-left');
+  if (n >= 12) {
+    requestAnimationFrame(() => {
+      const c = el('comment-3');
+      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
+      container.scrollTop = Math.max(0, top);
+    });
+  } else if (n >= 11) {
+    requestAnimationFrame(() => {
+      const c = el('comment-2');
+      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
+      container.scrollTop = Math.max(0, top);
+    });
+  } else if (n >= 10) {
+    requestAnimationFrame(() => {
+      const c = el('comment-1');
+      const top = c.offsetTop - (container.clientHeight / 2) + (c.offsetHeight / 2);
+      container.scrollTop = Math.max(0, top);
+    });
+  } else {
+    container.scrollTop = 0;
+  }
 
   // ─ caption ─
   hideCaption();
