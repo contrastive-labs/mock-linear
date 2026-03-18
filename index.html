@@ -1185,26 +1185,109 @@ function setPlayIcon(p) {
   el('pause-icon').style.display = p ? 'block' : 'none';
 }
 
-el('play-btn').addEventListener('click', () => isPlaying ? pauseAnim() : resumeAnim());
-el('startover-btn').addEventListener('click', restartAnim);
+/* ════════════════════════════════════════════════════════════
+   SEEK-AWARE STATE MACHINE
+   applyStateAtStep(n) instantly sets the DOM to the state
+   that should be visible at the START of step n.
+════════════════════════════════════════════════════════════ */
 
-/* Prev / Next step — jump and auto-pause (per spec) */
-el('prev-step-btn').addEventListener('click', () => {
-  const cur = getStepAt(totalElapsed);
-  const target = Math.max(0, cur - 1);
-  pauseAnim();
-  totalElapsed = stepOffsets[target];
-  updateProgressUI(totalElapsed);
-  // auto-pause: stay paused after jump
-});
-el('next-step-btn').addEventListener('click', () => {
-  const cur = getStepAt(totalElapsed);
-  const target = Math.min(STEPS.length - 1, cur + 1);
-  pauseAnim();
-  totalElapsed = stepOffsets[target];
-  updateProgressUI(totalElapsed);
-  // auto-pause: stay paused after jump
-});
+function applyStateAtStep(n) {
+  /* Instantly reset ALL dynamic DOM to a clean baseline, then
+     re-apply every side-effect that has already happened by step n. */
+
+  // ─ zoom layer ─
+  zoomLayer.style.transition = 'none';
+  zoomLayer.style.transform = 'scale(1)';
+  zoomLayer.style.transformOrigin = '50% 50%';
+
+  // ─ intro overlay ─
+  const io = el('intro-overlay');
+  if (n >= 1) {
+    io.style.opacity = '0'; io.style.pointerEvents = 'none'; io.classList.add('fade-out');
+  } else {
+    io.style.opacity = '1'; io.style.pointerEvents = 'all'; io.classList.remove('fade-out');
+  }
+
+  // ─ new issue dialog ─
+  const dialogOpen = (n === 3 || n === 4 || n === 5);
+  el('overlay-backdrop').classList.toggle('open', dialogOpen || n === 7 || n === 8 || n === 9 || n === 10 || n === 11 || n === 12);
+  el('new-issue-dialog').classList.toggle('open', dialogOpen);
+
+  // ─ dialog fields ─
+  el('dialog-title-input').value = (n >= 4) ? 'Try transposeconv2d rather than pixelshuffel for upsampling' : '';
+  el('dialog-desc-input').value  = (n >= 5) ? 'Can you please replace the upsampling layer with transpose conv2d and see how the test loss changes after training for 10 epochs? Please compare it to the baseline, which is pixel shuffle.' : '';
+
+  // ─ issues list ─
+  el('new-issue-row').style.display = (n >= 6) ? 'flex' : 'none';
+  el('issues-count').textContent = (n >= 6) ? '4' : '3';
+
+  // ─ issue modal ─
+  const panelOpen = (n >= 7 && n <= 12);
+  el('issue-modal').classList.toggle('open', panelOpen);
+  el('issue-description').textContent = panelOpen
+    ? 'Can you please replace the upsampling layer with transpose conv2d and see how the test loss changes after training for 10 epochs? Please compare it to the baseline, which is pixel shuffle.'
+    : '';
+
+  // ─ zoom in when panel/dialog is open ─
+  if (dialogOpen) {
+    // zoom into dialog — but getBoundingClientRect only works after layout;
+    // use a rAF to let the DOM settle first
+    requestAnimationFrame(() => {
+      const formEl = el('new-issue-form');
+      zoomLayer.style.transition = 'none';
+      const r = formEl.getBoundingClientRect();
+      const s = scaleToFit(r);
+      const cx = r.left + r.width / 2;
+      const cy = r.top  + r.height / 2;
+      zoomLayer.style.transformOrigin = `${cx}px ${cy}px`;
+      zoomLayer.style.transform = `scale(${s})`;
+    });
+  } else if (panelOpen) {
+    requestAnimationFrame(() => {
+      const panelEl = el('issue-panel');
+      zoomLayer.style.transition = 'none';
+      const r = panelEl.getBoundingClientRect();
+      const s = scaleToFit(r);
+      const cx = r.left + r.width / 2;
+      const cy = r.top  + r.height / 2;
+      zoomLayer.style.transformOrigin = `${cx}px ${cy}px`;
+      zoomLayer.style.transform = `scale(${s})`;
+    });
+  }
+
+  // ─ assignee ─
+  if (n >= 8) {
+    el('assignee-unassigned').style.display = 'none';
+    el('assignee-chip').classList.add('visible');
+  } else {
+    el('assignee-unassigned').style.display = '';
+    el('assignee-chip').classList.remove('visible');
+  }
+  el('assignee-dropdown').classList.remove('open');
+  el('assignee-input').style.display = 'none';
+  el('assignee-input').value = '';
+
+  // ─ typing indicator ─
+  el('typing-indicator').classList.remove('show');
+
+  // ─ comments ─
+  el('comment-1').classList.toggle('visible', n >= 10);
+  el('comment-2').classList.toggle('visible', n >= 11);
+  el('comment-3').classList.toggle('visible', n >= 12);
+
+  // ─ scroll position ─
+  if (n >= 12) el('issue-panel-left').scrollTop = 900;
+  else if (n >= 11) el('issue-panel-left').scrollTop = 450;
+  else if (n >= 10) el('issue-panel-left').scrollTop = 200;
+  else el('issue-panel-left').scrollTop = 0;
+
+  // ─ caption ─
+  hideCaption();
+}
+
+/* Generation counter — incremented on every jump/restart so stale
+   async runners know to exit immediately.                          */
+let runGen = 0;
 
 function pauseAnim() {
   isPlaying = false; paused = true; setPlayIcon(false);
@@ -1229,6 +1312,19 @@ function tickProgress() {
   });
 }
 
+/* Jump to a specific step index, apply DOM state, then resume */
+function jumpToStep(targetIdx, andPlay = false) {
+  runGen++;                          // invalidate any running async chain
+  pauseAnim(); paused = false;
+  if (pauseResolve) { pauseResolve(); pauseResolve = null; }
+  totalElapsed = stepOffsets[targetIdx];
+  updateProgressUI(totalElapsed);
+  applyStateAtStep(targetIdx);
+  if (andPlay) {
+    setTimeout(() => startFromStep(targetIdx), 50);
+  }
+}
+
 document.querySelectorAll('.speed-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
@@ -1237,108 +1333,113 @@ document.querySelectorAll('.speed-btn').forEach(btn => {
   });
 });
 
-/* Seek */
+/* Seek — drag/click on progress bar: jump to step and resume */
 let dragging = false;
 function seekTo(pct) {
-  totalElapsed = Math.max(0, Math.min(1, pct)) * TOTAL_MS;
-  updateProgressUI(totalElapsed);
+  const ms = Math.max(0, Math.min(1, pct)) * TOTAL_MS;
+  const targetIdx = getStepAt(ms);
+  jumpToStep(targetIdx, true);
 }
 el('progress-track').addEventListener('mousedown', e => {
   dragging = true;
-  seekTo((e.clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth);
-  pauseAnim();
+  const pct = (e.clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth;
+  jumpToStep(getStepAt(Math.max(0,Math.min(1,pct))*TOTAL_MS), false);
+  // stay paused while dragging
 });
 document.addEventListener('mousemove', e => {
   if (!dragging) return;
-  seekTo((e.clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth);
+  const pct = (e.clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth;
+  const ms = Math.max(0, Math.min(1, pct)) * TOTAL_MS;
+  totalElapsed = ms;
+  updateProgressUI(ms);
+  applyStateAtStep(getStepAt(ms));
 });
-document.addEventListener('mouseup', () => { if (dragging) { dragging = false; resumeAnim(); } });
+document.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  const targetIdx = getStepAt(totalElapsed);
+  jumpToStep(targetIdx, true);
+});
 el('progress-track').addEventListener('touchstart', e => {
   dragging = true;
-  seekTo((e.touches[0].clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth);
-  pauseAnim();
+  const pct = (e.touches[0].clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth;
+  jumpToStep(getStepAt(Math.max(0,Math.min(1,pct))*TOTAL_MS), false);
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if (!dragging) return;
-  seekTo((e.touches[0].clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth);
+  const pct = (e.touches[0].clientX - el('progress-track').getBoundingClientRect().left) / el('progress-track').offsetWidth;
+  const ms = Math.max(0, Math.min(1, pct)) * TOTAL_MS;
+  totalElapsed = ms;
+  updateProgressUI(ms);
+  applyStateAtStep(getStepAt(ms));
 }, { passive: true });
-document.addEventListener('touchend', () => { if (dragging) { dragging = false; resumeAnim(); } });
+document.addEventListener('touchend', () => {
+  if (!dragging) return;
+  dragging = false;
+  jumpToStep(getStepAt(totalElapsed), true);
+});
+
+el('play-btn').addEventListener('click', () => isPlaying ? pauseAnim() : resumeAnim());
+el('startover-btn').addEventListener('click', restartAnim);
+
+/* Prev / Next step — jump and auto-pause */
+el('prev-step-btn').addEventListener('click', () => {
+  const target = Math.max(0, getStepAt(totalElapsed) - 1);
+  jumpToStep(target, false);
+});
+el('next-step-btn').addEventListener('click', () => {
+  const target = Math.min(STEPS.length - 1, getStepAt(totalElapsed) + 1);
+  jumpToStep(target, false);
+});
 
 /* Restart */
 function restartAnim() {
+  runGen++;
   pauseAnim(); paused = false;
   if (pauseResolve) { pauseResolve(); pauseResolve = null; }
   totalElapsed = 0; updateProgressUI(0);
-
-  // Reset zoom layer
-  zoomLayer.style.transition = 'none';
-  zoomLayer.style.transform = 'scale(1)';
-  zoomLayer.style.transformOrigin = '50% 50%';
-
-  // Reset UI
+  applyStateAtStep(0);
+  // restore intro overlay
   const io = el('intro-overlay');
   io.style.opacity = '1'; io.style.pointerEvents = 'all'; io.classList.remove('fade-out');
-  el('overlay-backdrop').classList.remove('open');
-  el('new-issue-dialog').classList.remove('open');
-  el('issue-modal').classList.remove('open');
-  el('new-issue-row').style.display = 'none';
-  el('issues-count').textContent = '3';
-  el('comment-1').classList.remove('visible');
-  el('comment-2').classList.remove('visible');
-  el('comment-3').classList.remove('visible');
-  el('typing-indicator').classList.remove('show');
-  el('assignee-chip').classList.remove('visible');
-  el('assignee-dropdown').classList.remove('open');
-  el('assignee-input').style.display = 'none';
-  el('assignee-input').value = '';
-  el('assignee-unassigned').style.display = '';
-  el('issue-description').textContent = '';
-  el('dialog-title-input').value = '';
-  el('dialog-desc-input').value = '';
-  el('issue-panel-left').scrollTop = 0;
-  hideCaption();
-
   const p = centre('issues-list');
   setCursorPos(p.x, p.y);
-  setTimeout(runAnimation, 300);
+  setTimeout(() => startFromStep(0), 300);
 }
 
-/* Main runner */
-async function runAnimation() {
+/* Start (or resume) the async animation chain from step index `from` */
+async function startFromStep(from) {
+  const myGen = runGen;
   isPlaying = true; paused = false; setPlayIcon(true); lastTs = null; tickProgress();
-  const p = centre('issues-list');
-  setCursorPos(p.x, p.y);
-  for (let i = 0; i < STEPS.length; i++) {
+  for (let i = from; i < STEPS.length; i++) {
+    if (runGen !== myGen) return;   // a newer jump/restart happened — bail out
     await STEPS[i].fn();
+    if (runGen !== myGen) return;
     await checkPause();
+    if (runGen !== myGen) return;
   }
+  if (runGen !== myGen) return;
   isPlaying = false; setPlayIcon(false);
   showCaption('Playback complete — click ↺ to replay');
 }
 
+/* Main runner (called on initial load) */
+function runAnimation() {
+  startFromStep(0);
+}
+
 /* ── Keyboard controls ── */
 document.addEventListener('keydown', e => {
-  // Ignore when focus is inside an input/textarea
   if (['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) return;
   if (e.code === 'Space') {
     e.preventDefault();
     isPlaying ? pauseAnim() : resumeAnim();
   } else if (e.code === 'ArrowLeft') {
     e.preventDefault();
-    const cur = getStepAt(totalElapsed);
-    const target = Math.max(0, cur - 1);
-    pauseAnim();
-    totalElapsed = stepOffsets[target];
-    updateProgressUI(totalElapsed);
-    // auto-pause after jump
+    jumpToStep(Math.max(0, getStepAt(totalElapsed) - 1), false);
   } else if (e.code === 'ArrowRight') {
     e.preventDefault();
-    const cur = getStepAt(totalElapsed);
-    const target = Math.min(STEPS.length - 1, cur + 1);
-    pauseAnim();
-    totalElapsed = stepOffsets[target];
-    updateProgressUI(totalElapsed);
-    // auto-pause after jump
+    jumpToStep(Math.min(STEPS.length - 1, getStepAt(totalElapsed) + 1), false);
   }
 });
 
