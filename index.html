@@ -439,7 +439,8 @@
       z-index: 500;
       transition: opacity .7s;
     }
-    #intro-overlay.fade-out { opacity: 0; pointer-events: none; }
+    #intro-overlay.fade-out { opacity: 0; pointer-events: none; visibility: hidden; }
+    #intro-overlay.hidden { display: none; }
     .intro-badge {
       display: flex; align-items: center; gap: 8px;
       background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3);
@@ -952,7 +953,8 @@ const STEPS = [
   { label: 'Opening Linear — Issues view', durationMs: 2800,
     async fn() {
       el('intro-overlay').classList.add('fade-out');
-      await gate(600);
+      await gate(700);
+      el('intro-overlay').classList.add('hidden');
       showCaption('Opening Linear — Issues view');
       const p = centre('issues-list');
       await moveCursor(p.x, p.y, 900);
@@ -1203,9 +1205,11 @@ function applyStateAtStep(n) {
   // ─ intro overlay ─
   const io = el('intro-overlay');
   if (n >= 1) {
-    io.style.opacity = '0'; io.style.pointerEvents = 'none'; io.classList.add('fade-out');
+    io.style.opacity = '0'; io.style.pointerEvents = 'none';
+    io.classList.add('fade-out'); io.classList.add('hidden');
   } else {
-    io.style.opacity = '1'; io.style.pointerEvents = 'all'; io.classList.remove('fade-out');
+    io.style.opacity = '1'; io.style.pointerEvents = 'all';
+    io.classList.remove('fade-out'); io.classList.remove('hidden');
   }
 
   // ─ new issue dialog ─
@@ -1401,7 +1405,8 @@ function restartAnim() {
   applyStateAtStep(0);
   // restore intro overlay
   const io = el('intro-overlay');
-  io.style.opacity = '1'; io.style.pointerEvents = 'all'; io.classList.remove('fade-out');
+  io.style.opacity = '1'; io.style.pointerEvents = 'all';
+  io.classList.remove('fade-out'); io.classList.remove('hidden');
   const p = centre('issues-list');
   setCursorPos(p.x, p.y);
   setTimeout(() => startFromStep(0), 300);
