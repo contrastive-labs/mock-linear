@@ -678,13 +678,6 @@
       <div id="issue-panel-left">
         <div id="issue-description"></div>
         <div id="comments-section">
-          <div id="typing-indicator">
-            <div class="comment-avatar" style="width:22px;height:22px;font-size:9px">MA</div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <span class="typing-label">ML Agent is typing…</span>
-          </div>
           <div class="comment-block" id="comment-1">
             <div class="comment-header">
               <div class="comment-avatar">MA</div>
@@ -727,6 +720,13 @@ Training completed successfully on AWS Batch (g4dn.xlarge, 1× NVIDIA T4).
 Checkpoint saved to s3://ml-models/super-res/v3-pixelshuffle.pt
 
 <span class="hl">Next steps:</span> Try sub-pixel convolution with perceptual loss for another +0.3–0.5 dB gain.</div>
+          </div>
+          <div id="typing-indicator">
+            <div class="comment-avatar" style="width:22px;height:22px;font-size:9px">MA</div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <span class="typing-label">ML Agent is typing…</span>
           </div>
         </div>
       </div>
@@ -1098,7 +1098,9 @@ const STEPS = [
     async fn() {
       showCaption('ML Agent is reviewing the issue…');
       el('typing-indicator').classList.add('show');
-      await gate(3400);
+      await gate(100);
+      scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
+      await gate(3300);
       hideCaption();
     }
   },
@@ -1121,7 +1123,9 @@ const STEPS = [
     async fn() {
       showCaption('Training job running on AWS Batch…');
       el('typing-indicator').classList.add('show');
-      await gate(2200);
+      await gate(100);
+      scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
+      await gate(2100);
       el('typing-indicator').classList.remove('show');
       el('comment-2').classList.add('visible');
       await gate(100);
@@ -1137,7 +1141,9 @@ const STEPS = [
       await showCaption('4 hours later — training complete!', 1800);
       showCaption('ML Agent is writing up the results…');
       el('typing-indicator').classList.add('show');
-      await gate(2200);
+      await gate(100);
+      scrollCommentIntoView(el('typing-indicator'), el('issue-panel-left'));
+      await gate(2100);
       el('typing-indicator').classList.remove('show');
       el('comment-3').classList.add('visible');
       await gate(100);
